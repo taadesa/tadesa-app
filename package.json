@@ -1,0 +1,7 @@
+{
+  "name": "SmartEnglish - Learn English Daily",
+  "description": "A comprehensive English learning application featuring personalized daily goals, interactive flashcards, multi-modal quizzes, and performance analytics.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

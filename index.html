@@ -1,0 +1,139 @@
+
+import React, { useState, useEffect } from 'react';
+import { Screen, UserStats, Word, Category } from './types';
+import { wordBank } from './data/wordBank';
+import Home from './screens/Home';
+import Quiz from './screens/Quiz';
+import Flashcard from './screens/Flashcard';
+import Summary from './screens/Summary';
+import Review from './screens/Review';
+import LevelSelect from './screens/LevelSelect';
+import Topics from './screens/Topics';
+
+const App: React.FC = () => {
+  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.HOME);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [stats, setStats] = useState<UserStats>(() => {
+    const saved = localStorage.getItem('english_app_stats');
+    return saved ? JSON.parse(saved) : {
+      dailyGoal: 20,
+      completedToday: 0,
+      learningTimeMinutes: 0,
+      accuracy: 0,
+      streak: 5,
+      xp: 100,
+      level: 'beginner',
+      learnedWordsIds: [],
+      mistakeWordsIds: []
+    };
+  });
+
+  const [currentSessionWords, setCurrentSessionWords] = useState<Word[]>([]);
+
+  useEffect(() => {
+    localStorage.setItem('english_app_stats', JSON.stringify(stats));
+  }, [stats]);
+
+  const generateSession = (category?: Category) => {
+    let pool = wordBank;
+    
+    // 1. Filter by category if selected
+    if (category) {
+      pool = pool.filter(w => w.category === category);
+      setSelectedCategory(category);
+    } else {
+      setSelectedCategory(null);
+    }
+
+    // 2. Prioritize words NOT learned yet
+    let sessionPool = pool.filter(w => !stats.learnedWordsIds.includes(w.id));
+    
+    // 3. If everything is learned, pick from mistakes or just reshuffle
+    if (sessionPool.length === 0) {
+      sessionPool = pool;
+    }
+
+    const shuffled = [...sessionPool].sort(() => 0.5 - Math.random());
+    setCurrentSessionWords(shuffled.slice(0, 5));
+    navigateTo(Screen.QUIZ);
+  };
+
+  const dailyWord = wordBank[Math.floor(Date.now() / 86400000) % wordBank.length];
+
+  const navigateTo = (screen: Screen) => {
+    setCurrentScreen(screen);
+    window.scrollTo(0, 0);
+  };
+
+  const completeSession = (newLearnedIds: string[], mistakes: string[], earnedXP: number) => {
+    setStats(prev => ({
+      ...prev,
+      completedToday: prev.completedToday + newLearnedIds.length,
+      learnedWordsIds: Array.from(new Set([...prev.learnedWordsIds, ...newLearnedIds])),
+      mistakeWordsIds: Array.from(new Set([...prev.mistakeWordsIds, ...mistakes])),
+      xp: prev.xp + earnedXP,
+      accuracy: Math.round(((prev.learnedWordsIds.length + newLearnedIds.length) / (prev.learnedWordsIds.length + newLearnedIds.length + mistakes.length || 1)) * 100)
+    }));
+    navigateTo(Screen.SUMMARY);
+  };
+
+  const spendXP = (amount: number) => {
+    if (stats.xp >= amount) {
+      setStats(prev => ({ ...prev, xp: prev.xp - amount }));
+      return true;
+    }
+    return false;
+  };
+
+  const renderScreen = () => {
+    switch (currentScreen) {
+      case Screen.HOME:
+        return <Home stats={stats} dailyWord={dailyWord} onStartQuiz={() => generateSession()} onNavigateReview={() => navigateTo(Screen.REVIEW)} onNavigateTopics={() => navigateTo(Screen.TOPICS)} />;
+      case Screen.TOPICS:
+        return <Topics onSelectTopic={(cat) => generateSession(cat)} onBack={() => navigateTo(Screen.HOME)} stats={stats} />;
+      case Screen.QUIZ:
+        return <Quiz words={currentSessionWords} userXP={stats.xp} onSpendXP={spendXP} onComplete={(learned, mistakes, xp) => completeSession(learned, mistakes, xp)} onCancel={() => navigateTo(Screen.HOME)} />;
+      case Screen.FLASHCARD:
+        return <Flashcard onNext={() => navigateTo(Screen.QUIZ)} onCancel={() => navigateTo(Screen.HOME)} />;
+      case Screen.SUMMARY:
+        return <Summary stats={stats} onHome={() => navigateTo(Screen.HOME)} onReview={() => navigateTo(Screen.REVIEW)} />;
+      case Screen.REVIEW:
+        return <Review onBack={() => navigateTo(Screen.HOME)} />;
+      case Screen.LEVELS:
+        return <LevelSelect stats={stats} onSelect={() => navigateTo(Screen.HOME)} />;
+      default:
+        return <Home stats={stats} dailyWord={dailyWord} onStartQuiz={() => generateSession()} onNavigateReview={() => navigateTo(Screen.REVIEW)} onNavigateTopics={() => navigateTo(Screen.TOPICS)} />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen max-w-md mx-auto bg-background-light relative shadow-xl overflow-x-hidden">
+      {renderScreen()}
+      
+      {(currentScreen === Screen.HOME || currentScreen === Screen.LEVELS || currentScreen === Screen.TOPICS) && (
+        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 backdrop-blur-lg border-t border-slate-200 pb-8 pt-2 px-8 flex justify-between items-center z-50">
+          <button onClick={() => navigateTo(Screen.HOME)} className={`flex flex-col items-center gap-1 ${currentScreen === Screen.HOME ? 'text-primary' : 'text-slate-400'}`}>
+            <span className="material-icons">home</span>
+            <span className="text-[10px] font-medium">בית</span>
+          </button>
+          <button onClick={() => navigateTo(Screen.TOPICS)} className={`flex flex-col items-center gap-1 ${currentScreen === Screen.TOPICS ? 'text-primary' : 'text-slate-400'}`}>
+            <span className="material-icons">grid_view</span>
+            <span className="text-[10px] font-medium">נושאים</span>
+          </button>
+          <button onClick={() => navigateTo(Screen.LEVELS)} className={`flex flex-col items-center gap-1 ${currentScreen === Screen.LEVELS ? 'text-primary' : 'text-slate-400'}`}>
+            <span className="material-icons">trending_up</span>
+            <span className="text-[10px] font-medium">רמות</span>
+          </button>
+          <button className="flex flex-col items-center gap-1 text-slate-400">
+            <span className="material-icons">person</span>
+            <span className="text-[10px] font-medium">פרופיל</span>
+          </button>
+        </nav>
+      )}
+
+      <div className="fixed bottom-1 left-1/2 -translate-x-1/2 w-32 h-1.5 bg-slate-300 rounded-full z-[60]"></div>
+    </div>
+  );
+};
+
+export default App;
